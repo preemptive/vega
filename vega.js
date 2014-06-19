@@ -2951,6 +2951,8 @@ function vg_load_http(url, callback) {
 vg.data.facet = function() {
 
   var keys = [],
+      kkeys = [],
+      as = [],
       sort = null;
 
   function facet(data) {    
@@ -2961,7 +2963,7 @@ vg.data.facet = function() {
         },
         map = {}, 
         vals = result.values,
-        obj, klist, kstr, len, i, j, k, kv, cmp;
+        obj, klist, kvals, kstr, len, i, j, k, m, kv, cmp;
 
     if (keys.length === 0) {
       // if no keys, skip collation step
@@ -2974,9 +2976,11 @@ vg.data.facet = function() {
     }
 
     for (i=0, len=data.length; i<len; ++i) {
+      kvals = {};
       for (k=0, klist=[], kstr=""; k<keys.length; ++k) {
         kv = keys[k](data[i]);
         klist.push(kv);
+        if( as[k] ) kvals[as[k]] = kv;
         kstr += (k>0 ? "|" : "") + String(kv);
       }
       obj = map[kstr];
@@ -2987,6 +2991,10 @@ vg.data.facet = function() {
           index: vals.length,
           values: []
         });
+
+        for(m in kvals) {
+          obj[m] = kvals[m];
+        }
       }
       obj.values.push(data[i]);
     }
@@ -2999,7 +3007,12 @@ vg.data.facet = function() {
 
     return result;
   }
-  
+
+  facet.as = function(k) {
+    as = vg.array(k);
+    return facet;
+  };
+
   facet.keys = function(k) {
     keys = vg.array(k).map(vg.accessor);
     return facet;
