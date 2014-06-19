@@ -6,8 +6,8 @@ vg.data.log = function() {
   	  if( !console || !console.log ) return { data: data, meta: meta };
       if( label ) console.log(label);
       
-      console.log(data);
-      if( log_meta ) console.log(meta);
+      console.log(vg.duplicate(data));
+      if( log_meta ) console.log(vg.duplicate(meta));
       return { data: data, meta: meta };
     };
   
