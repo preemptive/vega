@@ -41,6 +41,7 @@ vega.js: \
 	src/data/geo.js \
 	src/data/geopath.js \
 	src/data/link.js \
+	src/data/log.js \
 	src/data/pie.js \
 	src/data/slice.js \
 	src/data/sort.js \

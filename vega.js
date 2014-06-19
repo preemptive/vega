@@ -2742,11 +2742,13 @@ function vg_data_duplicate(d) {
     for (i=0, n=d.length; i<n; ++i) {
       x.push(vg_data_duplicate(d[i]));
     }
-  } else if (vg.isObject(d)) {
+  } else if (vg.isObject(d) && !vg.isFunction(d)) {
     x = {};
     for (i in d) {
       x[i] = vg_data_duplicate(d[i]);
     }
+  } else if (vg.isFunction(d) && i === 'toString') {
+    x[i] = d[i];
   }
   return x;
 }
@@ -3372,11 +3374,11 @@ vg.data.facet = function() {
   return function() {
     var field = null,
         as = null,
-        type = undefined,
+        data_type = undefined,
         expr = vg.identity;
   
     var formula = function(data, db, group, meta) {
-      meta[field] = vg.meta.update(null,as || field,type);
+      meta[field] = vg.meta.update(null,as || field, data_type);
       data.forEach(function(d, i, list) {
         if (field) d[field] = expr.call(null, d, i, list);
         return d;
@@ -3390,8 +3392,8 @@ vg.data.facet = function() {
       return formula;
     };
 
-    formula.type = function(d) {
-      type = d;
+    formula.data_type = function(d) {
+      data_type = d;
       return formula;
     };
 
@@ -3626,7 +3628,32 @@ vg.data.facet = function() {
   };
   
   return link;
-};vg.data.pie = function() {
+};vg.data.log = function() {
+  var log_meta = false;
+  var label;
+
+  var log = function(data, db, group, meta) {
+  	  if( !console || !console.log ) return { data: data, meta: meta };
+      if( label ) console.log(label);
+      
+      console.log(data);
+      if( log_meta ) console.log(meta);
+      return { data: data, meta: meta };
+    };
+  
+  log.meta = function(bool) {
+    log_meta = bool;
+    return log;
+  };
+
+  log.label = function(str) {
+    label = str;
+    return log;
+  };
+
+  return log;
+};
+vg.data.pie = function() {
   var one = function() { return 1; },
       value = one,
       start = 0,

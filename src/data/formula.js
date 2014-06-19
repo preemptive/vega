@@ -3,11 +3,11 @@ vg.data.formula = (function() {
   return function() {
     var field = null,
         as = null,
-        type = undefined,
+        data_type = undefined,
         expr = vg.identity;
   
     var formula = function(data, db, group, meta) {
-      meta[field] = vg.meta.update(null,as || field,type);
+      meta[field] = vg.meta.update(null,as || field, data_type);
       data.forEach(function(d, i, list) {
         if (field) d[field] = expr.call(null, d, i, list);
         return d;
@@ -21,8 +21,8 @@ vg.data.formula = (function() {
       return formula;
     };
 
-    formula.type = function(d) {
-      type = d;
+    formula.data_type = function(d) {
+      data_type = d;
       return formula;
     };
 

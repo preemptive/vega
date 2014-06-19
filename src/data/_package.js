@@ -78,11 +78,13 @@ function vg_data_duplicate(d) {
     for (i=0, n=d.length; i<n; ++i) {
       x.push(vg_data_duplicate(d[i]));
     }
-  } else if (vg.isObject(d)) {
+  } else if (vg.isObject(d) && !vg.isFunction(d)) {
     x = {};
     for (i in d) {
       x[i] = vg_data_duplicate(d[i]);
     }
+  } else if (vg.isFunction(d) && i === 'toString') {
+    x[i] = d[i];
   }
   return x;
 }
