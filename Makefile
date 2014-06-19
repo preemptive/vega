@@ -46,6 +46,7 @@ vega.js: \
 	src/data/sort.js \
 	src/data/stack.js \
 	src/data/stats.js \
+	src/data/transpose.js \
 	src/data/treemap.js \
 	src/data/truncate.js \
 	src/data/unique.js \
