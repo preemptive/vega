@@ -3632,6 +3632,7 @@ vg.data.facet = function() {
 };vg.data.stats = function() {
   var value = vg.accessor("data"),
       assign = false,
+      assign_to = "stats",
       median = false,
       output = {
         "count":    "count",
@@ -3694,7 +3695,7 @@ vg.data.facet = function() {
       v[output.stdev] = Math.sqrt(M2);
       if (median) v[output.median] = o[output.median];
       for (i=0, len=list.length; i<len; ++i) {
-        list[i].stats = v;
+        list[i][assign_to] = v;
       }
     }
     
@@ -3721,6 +3722,11 @@ vg.data.facet = function() {
     return stats;
   };
   
+  stats.assign_to = function (key) {
+    assign_to  = key;
+    return stats;
+  };
+
   stats.output = function(map) {
     vg.keys(output).forEach(function(k) {
       if (map[k] !== undefined) {
