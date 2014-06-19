@@ -96,12 +96,14 @@ vg.comparator = function(sort) {
   });
   return function(a,b) {
     var i, n, f, x, y;
-    for (i=0, n=sort.length; i<n; ++i) {
-      f = sort[i]; x = f(a); y = f(b);
-      if (x < y) return -1 * sign[i];
-      if (x > y) return sign[i];
-    }
-    return 0;
+      for (i=0, n=sort.length; i<n; ++i) {
+	  f = sort[i]; x = f(a); y = f(b);
+	  if (x === null || x === undefined || (typeof x === "number" && isNaN(x)) ) x =  Number.NEGATIVE_INFINITY;
+	  if (y === null || y === undefined || (typeof y === "number" && isNaN(y)) ) y = Number.NEGATIVE_INFINITY;
+	  if (x < y) return -1 * sign[i];
+	  if (x > y) return sign[i];
+      }
+      return 0;
   };
 };
 
@@ -217,7 +219,8 @@ vg.error = function(msg) {
   msg = "[Vega Err] " + msg;
   vg_write(msg);
   if (typeof alert !== "undefined") alert(msg);
-};vg.config = {};
+};
+vg.config = {};
 
 // are we running in node.js?
 // via timetler.com/2012/10/13/environment-detection-in-javascript/
