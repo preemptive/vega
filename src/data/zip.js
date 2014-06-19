@@ -10,25 +10,29 @@ vg.data.zip = function() {
     var v, d, i, len, map,
       zmeta = meta_db[z],
       zdata = db[z],
-      zlen = zdata.length;
-    
+      zlen = zdata.length,
+      newData = [],
+      zipElem;
     if (withKey) {
       map = {};
       zdata.forEach(function(s) { map[withKey(s)] = s; });
     }
     
     for (i=0, len=data.length; i<len; ++i) {
-      d = data[i];
-      d[as] = map
-        ? ((v=map[key(d)]) != null ? v : defaultValue)
+        zipElem = map
+            ? ((v=map[key(data[i])]) != null ? v : defaultValue)
         : zdata[i % zlen];
+	if (zipElem) {
+	    data[i][as] = zipElem;
+	    newData.push(data[i]);
+	}
     }
     
     //meta = vg.meta.extend(vg.duplicate( kkey ? zmeta[kkey] : zmeta ), as + ".", meta);
       meta = vg.meta.extend(vg.duplicate(zmeta), as  + ".", meta);
 
 	  //meta[as] = vg.meta.updateTo(zmeta[kkey], meta[as]);
-    return {data:data,meta:meta};
+    return {data:newData,meta:meta};
   }
 
   zip["with"] = function(d) {
