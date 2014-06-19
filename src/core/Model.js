@@ -36,15 +36,47 @@ vg.Model = (function() {
       : input;
     this.dependencies(name, tx);
   };
-
+  
   prototype.dependencies = function(name, tx) {
-    var source = this._defs.data.source[name],
-        data = this._data[name],
-        n = source ? source.length : 0, i, x;
-    for (i=0; i<n; ++i) {
-      x = vg_data_duplicate(data);
-      if (vg.isTree(data)) vg_make_tree(x);
-      this.ingest(source[i], tx, x);
+    var sources = this._defs.data.source, source,
+       i, x, k, k2, data, n, flag;
+
+    for( k in sources ) {
+      if( sources.hasOwnProperty(k) ) {
+        // single source
+        if( k === name ) {
+          source = sources[k];
+          n = source ? source.length : 0;
+          data = this._data[k];
+          for (i=0; i<n; ++i) {
+            x = vg_data_duplicate(data);
+            if (vg.isTree(data)) vg_make_tree(x);
+            this.ingest(source[i], tx, x);
+          }
+        } 
+        // multiple dependencies required (due to zip tx)
+        else if ( k.indexOf(name) !== -1 ) {
+          flag = true;
+          
+          // check that all the data required has been processed already.
+          n = (k2 = k.split('|')) ? k2.length : 0; 
+          for(i=0; i<n; ++i) {
+            if( k2[i] === "" ) flag = false; // case of 'zip' tx but not 'source'. Make sure data that uses the zip comes after zips included data.
+            if( !this._data[k2[i]] ) flag = false;
+          }
+          if( !flag ) continue;
+          
+          // process data
+          data = this._data[k2[0]]; 
+          source = sources[k];
+          n = source ? source.length : 0;
+          for (i=0; i<n; ++i) {
+            x = vg_data_duplicate(data);
+            if (vg.isTree(data)) vg_make_tree(x);
+            this.ingest(source[i], tx, x);
+          }
+        } 
+      }
     }
   };
 

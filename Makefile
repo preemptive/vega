@@ -29,6 +29,7 @@ vega.js: \
 	src/data/load.js \
 	src/data/read.js \
 	src/data/array.js \
+	src/data/aggregate.js \
 	src/data/copy.js \
 	src/data/cross.js \
 	src/data/facet.js \

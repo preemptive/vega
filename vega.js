@@ -2876,6 +2876,104 @@ function vg_load_http(url, callback) {
   };
   
   return array;
+};vg.data.aggregate = function() {
+  var value = vg.accessor("data"),
+      as= [],
+      fields = [],
+      median = false,
+      output = {
+        "count":    "count",
+        "min":      "min",
+        "max":      "max",
+        "sum":      "sum",
+        "mean":     "mean",
+        "variance": "variance",
+        "stdev":    "stdev",
+        "median":   "median"
+      };
+  
+  function reduce(value, assign_to, data) {
+    var min = +Infinity,
+        max = -Infinity,
+        sum = 0,
+        mean = 0,
+        M2 = 0,
+        i, len, v, delta;
+
+    var list = (vg.isArray(data) ? data : data.values || []).map(value);
+    
+    // compute aggregates
+    for (i=0, len=list.length; i<len; ++i) {
+      v = list[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+      delta = v - mean;
+      mean = mean + delta / (i+1);
+      M2 = M2 + delta * (v - mean);
+    }
+    M2 = M2 / (len - 1);
+    
+    var o = {};
+    if( !!assign_to ) data[assign_to] = o;
+
+    if (median) {
+      list.sort(vg.numcmp);
+      i = list.length >> 1;
+      o[output.median] = list.length % 2
+        ? list[i]
+        : (list[i-1] + list[i])/2;
+    }
+
+    o[output.count] = len;
+    o[output.min] = min;
+    o[output.max] = max;
+    o[output.sum] = sum;
+    o[output.mean] = mean;
+    o[output.variance] = M2;
+    o[output.stdev] = Math.sqrt(M2);
+    
+    if( !! assign_to ) o = data; 
+    return o;
+  }
+  
+  function stats(data) {
+    var i, as_key, value, ret;
+    ret = (vg.isArray(data) ? [data] : data.values || [])
+      .map(function (d) {
+        var output = {};
+        for( i=0; i<fields.length; i++ ) {
+          value = vg.accessor(fields[i]);
+          as_key = as[i];
+          if( vg.isArray(d) ) output[as_key] = reduce(value, null, d);
+          else output = reduce(value, as_key, d);
+        }
+        return output;
+      });
+    return ret;
+  }
+  
+  stats.median = function(bool) {
+    median = bool || false;
+    return stats;
+  };
+  
+  stats.value = function(field) {
+    value = vg.accessor(field);
+    return stats;
+  };
+  
+  stats.fields = function (keys) {
+    fields  = keys;
+    return stats;
+  };
+
+  stats.as = function (keys) {
+    as = keys;
+    return stats;
+  }
+  
+  return stats;
 };vg.data.copy = function() {
   var from = vg.accessor("data"),
       fields = [],
@@ -4144,6 +4242,7 @@ vg.data.facet = function() {
   };
 
   var count = 0;
+  var i;
   
   function load(d) {
     return function(error, data) {
@@ -4155,18 +4254,43 @@ vg.data.facet = function() {
       if (--count === 0) callback();
     }
   }
-  
+
   (spec || []).forEach(function(d) {
     if (d.url) {
       count += 1;
       vg.data.load(d.url, load(d)); 
-    } else if (d.values) {
-      model.load[d.name] = vg.data.read(d.values, d.format);
-    } else if (d.source) {
-      var list = model.source[d.source] || (model.source[d.source] = []);
-      list.push(d.name);
+    }
+     
+    if (d.values) {
+      if (d.format && d.format.parse) {
+        // run specified value parsers
+        vg.data.read.parse(d.values, d.format.parse);
+      }
+      model.load[d.name] = d.values;
     }
     
+    // source -> add zip inputs here.
+    // check if a zip transform is used
+    
+    var dependencies = [];
+    if (d.source) {
+      dependencies.push(d.source);
+    }
+    if( vg.isArray(d.transform) ) {
+      for(i=0; i<d.transform.length; i++) {
+        if( d.transform[i].type === "zip" ) {
+          if( dependencies.length === 0 ) dependencies.push("");
+          dependencies.push(d.transform[i].with);
+        }
+      }
+    }
+    dependencies = vg.unique(dependencies, undefined, []);
+    if( dependencies.length > 0) {
+      dependencies = dependencies.join("|");
+      list = model.source[dependencies] || (model.source[dependencies] = []);
+      list.push(d.name);
+    }
+
     if (d.transform) {
       model.flow[d.name] = vg.parse.dataflow(d);
     }
@@ -6399,15 +6523,47 @@ function vg_hLegendLabels() {
       : input;
     this.dependencies(name, tx);
   };
-
+  
   prototype.dependencies = function(name, tx) {
-    var source = this._defs.data.source[name],
-        data = this._data[name],
-        n = source ? source.length : 0, i, x;
-    for (i=0; i<n; ++i) {
-      x = vg_data_duplicate(data);
-      if (vg.isTree(data)) vg_make_tree(x);
-      this.ingest(source[i], tx, x);
+    var sources = this._defs.data.source, source,
+       i, x, k, k2, data, n, flag;
+
+    for( k in sources ) {
+      if( sources.hasOwnProperty(k) ) {
+        // single source
+        if( k === name ) {
+          source = sources[k];
+          n = source ? source.length : 0;
+          data = this._data[k];
+          for (i=0; i<n; ++i) {
+            x = vg_data_duplicate(data);
+            if (vg.isTree(data)) vg_make_tree(x);
+            this.ingest(source[i], tx, x);
+          }
+        } 
+        // multiple dependencies required (due to zip tx)
+        else if ( k.indexOf(name) !== -1 ) {
+          flag = true;
+          
+          // check that all the data required has been processed already.
+          n = (k2 = k.split('|')) ? k2.length : 0; 
+          for(i=0; i<n; ++i) {
+            if( k2[i] === "" ) flag = false; // case of 'zip' tx but not 'source'. Make sure data that uses the zip comes after zips included data.
+            if( !this._data[k2[i]] ) flag = false;
+          }
+          if( !flag ) continue;
+          
+          // process data
+          data = this._data[k2[0]]; 
+          source = sources[k];
+          n = source ? source.length : 0;
+          for (i=0; i<n; ++i) {
+            x = vg_data_duplicate(data);
+            if (vg.isTree(data)) vg_make_tree(x);
+            this.ingest(source[i], tx, x);
+          }
+        } 
+      }
     }
   };
 
