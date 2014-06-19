@@ -1,3 +1,35 @@
+vg.meta = {};
+vg.meta.ingest = function (meta) {
+  return vg.meta.extend(meta, 'data.', { index : { as: 'index', type: 'number'} });
+};
+
+vg.meta.extend = function (meta, extend, base) {
+  return vg.keys(meta).reduce(function (d,k) {
+    return (d[extend + k] = meta[k], d);
+  }, base ? base : {});
+};
+
+vg.meta.replace = function (meta, match, replace, base) {
+  return vg.keys(meta).reduce(function (d,k) {
+    return (d[k.replace(match, replace)] = meta[k], d);
+  }, base ? base : {});
+};
+
+vg.meta.update = function (meta, as, type) {
+  meta = meta ? meta : {};
+  if( as ) meta.as = as;
+  if( type ) meta.type = type;
+  return meta;
+};
+
+vg.meta.updateTo = function (meta, new_meta, as, type) {
+  new_meta = new_meta ? new_meta : {};
+  if( as || (meta && meta.as ) ) new_meta.as = as || meta.as;
+  if( type || (meta && meta.type ) ) new_meta.type = type || meta.type;
+  return new_meta;
+};
+
+
 vg.data = {};
 
 vg.data.ingestAll = function(data) {

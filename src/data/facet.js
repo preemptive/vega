@@ -5,15 +5,17 @@ vg.data.facet = function() {
       as = [],
       sort = null;
 
-  function facet(data) {    
+  function facet(data, db, group, meta) {    
     var result = {
           key: "",
           keys: [],
           values: []
         },
+        new_meta = {},
         map = {}, 
         vals = result.values,
         obj, klist, kvals, kstr, len, i, j, k, m, kv, cmp;
+
 
     if (keys.length === 0) {
       // if no keys, skip collation step
@@ -30,7 +32,10 @@ vg.data.facet = function() {
       for (k=0, klist=[], kstr=""; k<keys.length; ++k) {
         kv = keys[k](data[i]);
         klist.push(kv);
-        if( as[k] ) kvals[as[k]] = kv;
+        if( as[k] ) {
+          kvals[as[k]] = kv;
+          new_meta[as[k]] = vg.duplicate(meta[kkeys[k]]);
+        }
         kstr += (k>0 ? "|" : "") + String(kv);
       }
       obj = map[kstr];
@@ -55,7 +60,8 @@ vg.data.facet = function() {
       }
     }
 
-    return result;
+    meta = vg.meta.replace(meta, /^data./i, 'values.[].data.', new_meta);
+    return { data: result, meta: meta };
   }
 
   facet.as = function(k) {
@@ -64,6 +70,7 @@ vg.data.facet = function() {
   };
 
   facet.keys = function(k) {
+    kkeys = vg.array(k);
     keys = vg.array(k).map(vg.accessor);
     return facet;
   };

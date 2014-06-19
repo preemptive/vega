@@ -2662,7 +2662,39 @@ var vg_gradient_id = 0;vg.canvas = {};vg.canvas.path = (function() {
   };
 
   return handler;
-})();vg.data = {};
+})();vg.meta = {};
+vg.meta.ingest = function (meta) {
+  return vg.meta.extend(meta, 'data.', { index : { as: 'index', type: 'number'} });
+};
+
+vg.meta.extend = function (meta, extend, base) {
+  return vg.keys(meta).reduce(function (d,k) {
+    return (d[extend + k] = meta[k], d);
+  }, base ? base : {});
+};
+
+vg.meta.replace = function (meta, match, replace, base) {
+  return vg.keys(meta).reduce(function (d,k) {
+    return (d[k.replace(match, replace)] = meta[k], d);
+  }, base ? base : {});
+};
+
+vg.meta.update = function (meta, as, type) {
+  meta = meta ? meta : {};
+  if( as ) meta.as = as;
+  if( type ) meta.type = type;
+  return meta;
+};
+
+vg.meta.updateTo = function (meta, new_meta, as, type) {
+  new_meta = new_meta ? new_meta : {};
+  if( as || (meta && meta.as ) ) new_meta.as = as || meta.as;
+  if( type || (meta && meta.type ) ) new_meta.type = type || meta.type;
+  return new_meta;
+};
+
+
+vg.data = {};
 
 vg.data.ingestAll = function(data) {
   return vg.isTree(data)
@@ -2882,7 +2914,7 @@ function vg_load_http(url, callback) {
   return array;
 };vg.data.aggregate = function() {
   var value = vg.accessor("data"),
-      as= [],
+      as= null,
       fields = [],
       median = false,
       output = {
@@ -2941,20 +2973,50 @@ function vg_load_http(url, callback) {
     return o;
   }
   
-  function stats(data) {
-    var i, as_key, value, ret;
-    ret = (vg.isArray(data) ? [data] : data.values || [])
-      .map(function (d) {
+  function addStatsMeta( meta, key, as, type) {
+    meta[key + '.sum']       = vg.meta.update(null, as, type);
+    meta[key + '.count']     = vg.meta.update(null, as, 'number');
+    meta[key + '.min']       = vg.meta.update(null, as, type);
+    meta[key + '.max']       = vg.meta.update(null, as, type);
+    meta[key + '.mean']      = vg.meta.update(null, as, type);
+    meta[key + '.variance']  = vg.meta.update(null, as, 'number');
+    meta[key + '.stdev']     = vg.meta.update(null, as, 'number');
+    meta[key + '.median']    = vg.meta.update(null, as, 'number');
+  }
+
+  function stats(data, db, group, meta) {
+    var i, as_key, value, ret, m, new_meta;
+    
+    if( vg.isArray(data) ) {
+      new_meta = {};
+      base = ''
+    } else {
+      base = 'values.[].';
+      new_meta = vg.duplicate(meta);
+    }
+
+    ret = (vg.isArray(data) ? [data] : data.values || []).map(function (d) {
         var output = {};
         for( i=0; i<fields.length; i++ ) {
           value = vg.accessor(fields[i]);
-          as_key = as[i];
-          if( vg.isArray(d) ) output[as_key] = reduce(value, null, d);
-          else output = reduce(value, as_key, d);
+          
+          m = meta[base + fields[i]];
+          as_key = (m && m.as) ? m.as : as[i] || fields[i].replace('.', '_'); 
+          if( m ) type = m.type;
+
+          if( vg.isArray(d) ) { 
+            output[as[i]] = reduce(value, null, d);
+            addStatsMeta(new_meta, as[i], as_key, type);
+          } else {
+            output = reduce(value, as[i], d); 
+            addStatsMeta(new_meta, as[i], as_key, type);
+          }
         }
         return output;
       });
-    return ret;
+
+    //meta = vg.meta.replace(meta, 'data.', 'values.[].')
+    return { data: ret, meta: new_meta };
   }
   
   stats.median = function(bool) {
@@ -2980,21 +3042,36 @@ function vg_load_http(url, callback) {
   return stats;
 };vg.data.copy = function() {
   var from = vg.accessor("data"),
+      fkey = '',
       fields = [],
       as = null;
   
-  var copy = vg.data.mapper(function(d) {
-    var src = from(d), i, len,
-        source = fields,
-        target = as || fields;
-    for (i=0, len=fields.length; i<len; ++i) {
-      d[target[i]] = src[fields[i]];
-    }
-    return d;
-  });
+  var copy = function(data, db, group, meta) {
+      fields.forEach(function (f, i) {
+        var o = meta[fkey + "." + f];
+        if( !o ) return;
+        meta[( as[i] || f)] = o;
+      });
+
+      data.forEach(function(d) {
+        var src = from(d), i, len,
+            source = fields,
+            target = as || fields;
+
+        for (i=0, len=fields.length; i<len; ++i) {
+          d[target[i]] = src[fields[i]];
+        }
+
+        return d;
+      });
+
+      return { data: data, meta: meta };
+    };
+
 
   copy.from = function(field) {
     from = vg.accessor(field);
+    fkey = field;
     return copy;
   };
   
@@ -3009,7 +3086,8 @@ function vg_load_http(url, callback) {
   };
 
   return copy;
-};vg.data.cross = function() {
+};
+vg.data.cross = function() {
   var other = null,
       nodiag = false,
       output = {left:"a", right:"b"};
@@ -3057,15 +3135,17 @@ vg.data.facet = function() {
       as = [],
       sort = null;
 
-  function facet(data) {    
+  function facet(data, db, group, meta) {    
     var result = {
           key: "",
           keys: [],
           values: []
         },
+        new_meta = {},
         map = {}, 
         vals = result.values,
         obj, klist, kvals, kstr, len, i, j, k, m, kv, cmp;
+
 
     if (keys.length === 0) {
       // if no keys, skip collation step
@@ -3082,7 +3162,10 @@ vg.data.facet = function() {
       for (k=0, klist=[], kstr=""; k<keys.length; ++k) {
         kv = keys[k](data[i]);
         klist.push(kv);
-        if( as[k] ) kvals[as[k]] = kv;
+        if( as[k] ) {
+          kvals[as[k]] = kv;
+          new_meta[as[k]] = vg.duplicate(meta[kkeys[k]]);
+        }
         kstr += (k>0 ? "|" : "") + String(kv);
       }
       obj = map[kstr];
@@ -3107,7 +3190,8 @@ vg.data.facet = function() {
       }
     }
 
-    return result;
+    meta = vg.meta.replace(meta, /^data./i, 'values.[].data.', new_meta);
+    return { data: result, meta: meta };
   }
 
   facet.as = function(k) {
@@ -3116,6 +3200,7 @@ vg.data.facet = function() {
   };
 
   facet.keys = function(k) {
+    kkeys = vg.array(k);
     keys = vg.array(k).map(vg.accessor);
     return facet;
   };
@@ -3286,15 +3371,32 @@ vg.data.facet = function() {
   
   return function() {
     var field = null,
+        as = null,
+        type = undefined,
         expr = vg.identity;
   
-    var formula = vg.data.mapper(function(d, i, list) {
-      if (field) d[field] = expr.call(null, d, i, list);
-      return d;
-    });
+    var formula = function(data, db, group, meta) {
+      meta[field] = vg.meta.update(null,as || field,type);
+      data.forEach(function(d, i, list) {
+        if (field) d[field] = expr.call(null, d, i, list);
+        return d;
+      });
 
-    formula.field = function(name) {
-      field = name;
+      return { data: data, meta: meta };
+    };
+
+    formula.field = function(d) {
+      field = d;
+      return formula;
+    };
+
+    formula.type = function(d) {
+      type = d;
+      return formula;
+    };
+
+    formula.as = function(d) {
+      as = d;
       return formula;
     };
   
@@ -3840,32 +3942,38 @@ vg.data.facet = function() {
   
   return stats;
 };vg.data.transpose = function() {
-  var by, as, value;
+  var by, as, value, kvalue;
 
-  function transpose (data, db) {
-    var keys = {}, ret, array = (vg.isArray(data) ? data : data.values || []);
+  function transpose (data, db, group, meta) {
+    var ret,
+      array = (vg.isArray(data) ? data : data.values || []),
+      new_meta = vg.duplicate(meta),
+      type = meta[kvalue];
 
     ret = array.map(function (values) {
       var output = vg.isArray(values) ? {} : values,
       input = vg.isArray(values) ? values : values.values || [];
 
       input.reduce(function (transposed, d) {
-        var key = by(d), path = 'transposed>>' + key;
-        transposed[key] = value(d);
+        var key = by(d),
+          path = key.replace(/\./g, '-');
+
+        transposed[path] = value(d);
         
-        if( !keys[path] ) {
-          keys[path] = {
-            as: as(d)
+        if( !new_meta["transposed." + path] ) {
+          new_meta["transposed." + path] = {
+            as: as ? as(d) : key,
+            type: type
           };
         }
 
         return transposed;
       }, output.transposed = {});
-      db.meta = keys;
+
       return output;
     });
 
-    return ret;
+    return { data: ret, meta: new_meta };
   }
 
   transpose.by = function (field) {
@@ -3879,8 +3987,9 @@ vg.data.facet = function() {
   };
 
   transpose.value = function (field) {
+    kvalue = field;
     value = vg.accessor(field);
-    return value;
+    return transpose;
   }
 
   return transpose;
@@ -4147,13 +4256,17 @@ vg.data.facet = function() {
   return cloud;
 };vg.data.zip = function() {
   var z = null,
+      kkey = null,
       as = "zip",
       key = vg.accessor("data"),
       defaultValue = undefined,
       withKey = null;
 
-  function zip(data, db) {
-    var zdata = db[z], zlen = zdata.length, v, d, i, len, map;
+  function zip(data, db, group, meta, meta_db) {
+    var v, d, i, len, map,
+      zmeta = meta_db[z],
+      zdata = db[z],
+      zlen = zdata.length;
     
     if (withKey) {
       map = {};
@@ -4167,7 +4280,11 @@ vg.data.facet = function() {
         : zdata[i % zlen];
     }
     
-    return data;
+    //meta = vg.meta.extend(vg.duplicate( kkey ? zmeta[kkey] : zmeta ), as + ".", meta);
+      meta = vg.meta.extend(vg.duplicate(zmeta), as  + ".", meta);
+
+	  //meta[as] = vg.meta.updateTo(zmeta[kkey], meta[as]);
+    return {data:data,meta:meta};
   }
 
   zip["with"] = function(d) {
@@ -4187,6 +4304,7 @@ vg.data.facet = function() {
 
   zip.key = function(k) {
     key = vg.accessor(k);
+    kkey = k;
     return zip;
   };
 
@@ -4196,7 +4314,8 @@ vg.data.facet = function() {
   };
 
   return zip;
-};vg.parse = {};vg.parse.axes = (function() {
+};
+vg.parse = {};vg.parse.axes = (function() {
   var ORIENT = {
     "x":      "bottom",
     "y":      "left",
@@ -4287,7 +4406,8 @@ vg.data.facet = function() {
     defs: spec,
     load: {},
     flow: {},
-    source: {}
+    source: {},
+    meta: {},
   };
 
   var count = 0;
@@ -4316,6 +4436,10 @@ vg.data.facet = function() {
         vg.data.read.parse(d.values, d.format.parse);
       }
       model.load[d.name] = d.values;
+    }
+
+    if( d.meta ) {
+      model.meta[d.name] = d.meta;
     }
     
     // source -> add zip inputs here.
@@ -4350,9 +4474,22 @@ vg.data.facet = function() {
 };vg.parse.dataflow = function(def) {
   var tx = (def.transform || []).map(vg.parse.transform),
       df = tx.length
-        ? function(data, db, group) {
-            return tx.reduce(function(d,t) { return t(d,db,group); }, data);
-          }
+        ? function(data, db, group, meta, meta_db) {
+       		var new_meta = meta; 
+        	var data = tx.reduce(function(d,t) { 
+        		var ret = t(d,db,group, new_meta, meta_db);
+        		if( ret.meta ) {
+        			new_meta = ret.meta;
+        			return ret.data;
+        		}
+        		else {
+        			return ret;
+        		}
+        	}, data);
+
+        	if( new_meta ) return { data: data, meta: new_meta };
+        	else return data;
+       	}
         : vg.identity;
   df.transforms = tx;
   return df;
@@ -6537,6 +6674,7 @@ function vg_hLegendLabels() {
 }vg.Model = (function() {
   function model() {
     this._defs = null;
+    this._meta = {};
     this._data = {};
     this._scene = null;
     this._reset = {axes: false, legends: false};
@@ -6550,6 +6688,12 @@ function vg_hLegendLabels() {
     return this;
   };
 
+  prototype.meta = function(meta) {
+    if (!arguments.length) return this._meta;
+    this._meta = vg.duplicate(meta);
+    return this;
+  };
+
   prototype.data = function(data) {
     if (!arguments.length) return this._data;
 
@@ -6559,23 +6703,24 @@ function vg_hLegendLabels() {
 
     for (i=0; i<len; ++i) {
       if (!data[k=keys[i]]) continue;
-      this.ingest(k, tx, data[k]);
+      this._meta[k] = this._meta[k] ? this._meta[k] : {};
+      this.ingest(k, tx, data[k], this._meta[k]);
     }
 
     this._reset.legends = true;
     return this;
   };
 
-  prototype.ingest = function(name, tx, input) {
-    this._data[name] = tx[name]
-      ? tx[name](input, this._data, this._defs.marks)
-      : input;
+  prototype.ingest = function(name, tx, input, meta) {
+    var ret = tx[name] ? tx[name](input, this._data, this._defs.marks, meta, this._meta) : input;
+    this._data[name] = ret.data ? ret.data : ret;
+    if( ret.meta ) this._meta[name] = ret.meta;
     this.dependencies(name, tx);
   };
   
   prototype.dependencies = function(name, tx) {
     var sources = this._defs.data.source, source,
-       i, x, k, k2, data, n, flag;
+       i, x, k, k2, data, meta, n, flag;
 
     for( k in sources ) {
       if( sources.hasOwnProperty(k) ) {
@@ -6584,32 +6729,36 @@ function vg_hLegendLabels() {
           source = sources[k];
           n = source ? source.length : 0;
           data = this._data[k];
+          meta = this._meta[k]; 
           for (i=0; i<n; ++i) {
             x = vg_data_duplicate(data);
             if (vg.isTree(data)) vg_make_tree(x);
-            this.ingest(source[i], tx, x);
+            this.ingest(source[i], tx, x, meta);
           }
         } 
-        // multiple dependencies required (due to zip tx)
+        // multiple dependencies required (due to 'zip' tx)
         else if ( k.indexOf(name) !== -1 ) {
           flag = true;
           
-          // check that all the data required has been processed already.
+          // get the dependency names (and number of).
           n = (k2 = k.split('|')) ? k2.length : 0; 
+          
+          // check whether the dependencies are available
           for(i=0; i<n; ++i) {
             if( k2[i] === "" ) flag = false; // case of 'zip' tx but not 'source'. Make sure data that uses the zip comes after zips included data.
-            if( !this._data[k2[i]] ) flag = false;
+            if( !this._data[k2[i]] ) flag = false; // if any of the data required is not present, set flag to false and do not do transformation yet.
           }
           if( !flag ) continue;
           
           // process data
           data = this._data[k2[0]]; 
+          meta = this._meta[k2[0]];
           source = sources[k];
           n = source ? source.length : 0;
           for (i=0; i<n; ++i) {
             x = vg_data_duplicate(data);
             if (vg.isTree(data)) vg_make_tree(x);
-            this.ingest(source[i], tx, x);
+            this.ingest(source[i], tx, x, meta);
           }
         } 
       }

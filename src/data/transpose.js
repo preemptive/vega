@@ -1,30 +1,36 @@
 vg.data.transpose = function() {
-  var by, as, value;
+  var by, as, value, kvalue;
 
-  function transpose (data, db) {
-    var keys = {}, ret, array = (vg.isArray(data) ? data : data.values || []);
+  function transpose (data, db, group, meta) {
+    var ret,
+      array = (vg.isArray(data) ? data : data.values || []),
+      new_meta = vg.duplicate(meta),
+      type = meta[kvalue];
 
     ret = array.map(function (values) {
       var output = vg.isArray(values) ? {} : values,
       input = vg.isArray(values) ? values : values.values || [];
 
       input.reduce(function (transposed, d) {
-        var key = by(d), path = 'transposed>>' + key;
-        transposed[key] = value(d);
+        var key = by(d),
+          path = key.replace(/\./g, '-');
+
+        transposed[path] = value(d);
         
-        if( !keys[path] ) {
-          keys[path] = {
-            as: as(d)
+        if( !new_meta["transposed." + path] ) {
+          new_meta["transposed." + path] = {
+            as: as ? as(d) : key,
+            type: type
           };
         }
 
         return transposed;
       }, output.transposed = {});
-      db.meta = keys;
+
       return output;
     });
 
-    return ret;
+    return { data: ret, meta: new_meta };
   }
 
   transpose.by = function (field) {
@@ -38,8 +44,9 @@ vg.data.transpose = function() {
   };
 
   transpose.value = function (field) {
+    kvalue = field;
     value = vg.accessor(field);
-    return value;
+    return transpose;
   }
 
   return transpose;

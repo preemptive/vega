@@ -1,6 +1,6 @@
 vg.data.aggregate = function() {
   var value = vg.accessor("data"),
-      as= [],
+      as= null,
       fields = [],
       median = false,
       output = {
@@ -59,20 +59,50 @@ vg.data.aggregate = function() {
     return o;
   }
   
-  function stats(data) {
-    var i, as_key, value, ret;
-    ret = (vg.isArray(data) ? [data] : data.values || [])
-      .map(function (d) {
+  function addStatsMeta( meta, key, as, type) {
+    meta[key + '.sum']       = vg.meta.update(null, as, type);
+    meta[key + '.count']     = vg.meta.update(null, as, 'number');
+    meta[key + '.min']       = vg.meta.update(null, as, type);
+    meta[key + '.max']       = vg.meta.update(null, as, type);
+    meta[key + '.mean']      = vg.meta.update(null, as, type);
+    meta[key + '.variance']  = vg.meta.update(null, as, 'number');
+    meta[key + '.stdev']     = vg.meta.update(null, as, 'number');
+    meta[key + '.median']    = vg.meta.update(null, as, 'number');
+  }
+
+  function stats(data, db, group, meta) {
+    var i, as_key, value, ret, m, new_meta;
+    
+    if( vg.isArray(data) ) {
+      new_meta = {};
+      base = ''
+    } else {
+      base = 'values.[].';
+      new_meta = vg.duplicate(meta);
+    }
+
+    ret = (vg.isArray(data) ? [data] : data.values || []).map(function (d) {
         var output = {};
         for( i=0; i<fields.length; i++ ) {
           value = vg.accessor(fields[i]);
-          as_key = as[i];
-          if( vg.isArray(d) ) output[as_key] = reduce(value, null, d);
-          else output = reduce(value, as_key, d);
+          
+          m = meta[base + fields[i]];
+          as_key = (m && m.as) ? m.as : as[i] || fields[i].replace('.', '_'); 
+          if( m ) type = m.type;
+
+          if( vg.isArray(d) ) { 
+            output[as[i]] = reduce(value, null, d);
+            addStatsMeta(new_meta, as[i], as_key, type);
+          } else {
+            output = reduce(value, as[i], d); 
+            addStatsMeta(new_meta, as[i], as_key, type);
+          }
         }
         return output;
       });
-    return ret;
+
+    //meta = vg.meta.replace(meta, 'data.', 'values.[].')
+    return { data: ret, meta: new_meta };
   }
   
   stats.median = function(bool) {

@@ -1,6 +1,7 @@
 vg.Model = (function() {
   function model() {
     this._defs = null;
+    this._meta = {};
     this._data = {};
     this._scene = null;
     this._reset = {axes: false, legends: false};
@@ -14,6 +15,12 @@ vg.Model = (function() {
     return this;
   };
 
+  prototype.meta = function(meta) {
+    if (!arguments.length) return this._meta;
+    this._meta = vg.duplicate(meta);
+    return this;
+  };
+
   prototype.data = function(data) {
     if (!arguments.length) return this._data;
 
@@ -23,23 +30,24 @@ vg.Model = (function() {
 
     for (i=0; i<len; ++i) {
       if (!data[k=keys[i]]) continue;
-      this.ingest(k, tx, data[k]);
+      this._meta[k] = this._meta[k] ? this._meta[k] : {};
+      this.ingest(k, tx, data[k], this._meta[k]);
     }
 
     this._reset.legends = true;
     return this;
   };
 
-  prototype.ingest = function(name, tx, input) {
-    this._data[name] = tx[name]
-      ? tx[name](input, this._data, this._defs.marks)
-      : input;
+  prototype.ingest = function(name, tx, input, meta) {
+    var ret = tx[name] ? tx[name](input, this._data, this._defs.marks, meta, this._meta) : input;
+    this._data[name] = ret.data ? ret.data : ret;
+    if( ret.meta ) this._meta[name] = ret.meta;
     this.dependencies(name, tx);
   };
   
   prototype.dependencies = function(name, tx) {
     var sources = this._defs.data.source, source,
-       i, x, k, k2, data, n, flag;
+       i, x, k, k2, data, meta, n, flag;
 
     for( k in sources ) {
       if( sources.hasOwnProperty(k) ) {
@@ -48,32 +56,36 @@ vg.Model = (function() {
           source = sources[k];
           n = source ? source.length : 0;
           data = this._data[k];
+          meta = this._meta[k]; 
           for (i=0; i<n; ++i) {
             x = vg_data_duplicate(data);
             if (vg.isTree(data)) vg_make_tree(x);
-            this.ingest(source[i], tx, x);
+            this.ingest(source[i], tx, x, meta);
           }
         } 
-        // multiple dependencies required (due to zip tx)
+        // multiple dependencies required (due to 'zip' tx)
         else if ( k.indexOf(name) !== -1 ) {
           flag = true;
           
-          // check that all the data required has been processed already.
+          // get the dependency names (and number of).
           n = (k2 = k.split('|')) ? k2.length : 0; 
+          
+          // check whether the dependencies are available
           for(i=0; i<n; ++i) {
             if( k2[i] === "" ) flag = false; // case of 'zip' tx but not 'source'. Make sure data that uses the zip comes after zips included data.
-            if( !this._data[k2[i]] ) flag = false;
+            if( !this._data[k2[i]] ) flag = false; // if any of the data required is not present, set flag to false and do not do transformation yet.
           }
           if( !flag ) continue;
           
           // process data
           data = this._data[k2[0]]; 
+          meta = this._meta[k2[0]];
           source = sources[k];
           n = source ? source.length : 0;
           for (i=0; i<n; ++i) {
             x = vg_data_duplicate(data);
             if (vg.isTree(data)) vg_make_tree(x);
-            this.ingest(source[i], tx, x);
+            this.ingest(source[i], tx, x, meta);
           }
         } 
       }

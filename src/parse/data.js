@@ -3,7 +3,8 @@ vg.parse.data = function(spec, callback) {
     defs: spec,
     load: {},
     flow: {},
-    source: {}
+    source: {},
+    meta: {},
   };
 
   var count = 0;
@@ -32,6 +33,10 @@ vg.parse.data = function(spec, callback) {
         vg.data.read.parse(d.values, d.format.parse);
       }
       model.load[d.name] = d.values;
+    }
+
+    if( d.meta ) {
+      model.meta[d.name] = d.meta;
     }
     
     // source -> add zip inputs here.

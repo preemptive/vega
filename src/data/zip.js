@@ -1,12 +1,16 @@
 vg.data.zip = function() {
   var z = null,
+      kkey = null,
       as = "zip",
       key = vg.accessor("data"),
       defaultValue = undefined,
       withKey = null;
 
-  function zip(data, db) {
-    var zdata = db[z], zlen = zdata.length, v, d, i, len, map;
+  function zip(data, db, group, meta, meta_db) {
+    var v, d, i, len, map,
+      zmeta = meta_db[z],
+      zdata = db[z],
+      zlen = zdata.length;
     
     if (withKey) {
       map = {};
@@ -20,7 +24,11 @@ vg.data.zip = function() {
         : zdata[i % zlen];
     }
     
-    return data;
+    //meta = vg.meta.extend(vg.duplicate( kkey ? zmeta[kkey] : zmeta ), as + ".", meta);
+      meta = vg.meta.extend(vg.duplicate(zmeta), as  + ".", meta);
+
+	  //meta[as] = vg.meta.updateTo(zmeta[kkey], meta[as]);
+    return {data:data,meta:meta};
   }
 
   zip["with"] = function(d) {
@@ -40,6 +48,7 @@ vg.data.zip = function() {
 
   zip.key = function(k) {
     key = vg.accessor(k);
+    kkey = k;
     return zip;
   };
 
