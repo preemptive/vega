@@ -92,6 +92,9 @@ vg.comparator = function(sort) {
     var i, n, f, x, y;
       for (i=0, n=sort.length; i<n; ++i) {
 	  f = sort[i]; x = f(a); y = f(b);
+
+	  if (typeof x == "string") x = x.toLowerCase();
+	  if (typeof y == "string") y = y.toLowerCase();
 	  if (x === null || x === undefined || (typeof x === "number" && isNaN(x)) ) x =  Number.NEGATIVE_INFINITY;
 	  if (y === null || y === undefined || (typeof y === "number" && isNaN(y)) ) y = Number.NEGATIVE_INFINITY;
 	  if (x < y) return -1 * sign[i];
