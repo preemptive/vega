@@ -108,4 +108,4 @@ test: all
 
 clean:
 	rm -f vega*.js
-	rm -r node_modules
+	rm -rf node_modules
