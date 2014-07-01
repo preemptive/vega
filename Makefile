@@ -10,6 +10,12 @@ all: \
 	vega.js \
 	vega.min.js
 
+rebuild: \
+	clean \
+	install \
+	all \
+	test
+
 vega.js: \
 	src/core/_start.js \
 	src/_package.js \
@@ -102,3 +108,4 @@ test: all
 
 clean:
 	rm -f vega*.js
+	rm -r node_modules
