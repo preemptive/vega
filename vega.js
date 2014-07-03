@@ -3981,7 +3981,11 @@ vg.data.pie = function() {
     var ret,
       array = (vg.isArray(data) ? data : data.values || []),
       new_meta = vg.duplicate(meta),
-      type = meta[kvalue];
+      type;
+
+    if( meta[kvalue] ) type = meta[kvalue].type;
+    else type = meta["values.[]." + kvalue] ? meta["values.[]." + kvalue].type : "";
+
 
     ret = array.map(function (values) {
       var output = vg.isArray(values) ? {} : values,
