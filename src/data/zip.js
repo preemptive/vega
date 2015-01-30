@@ -22,10 +22,18 @@ vg.data.zip = function() {
         zipElem = map
             ? ((v=map[key(data[i])]) != null ? v : defaultValue)
         : zdata[i % zlen];
-	if (zipElem) {
-	    data[i][as] = zipElem;
-	    newData.push(data[i]);
-	}
+        if (zipElem) {
+          data[i][as] = zipElem;
+          newData.push(data[i]);
+        } 
+        else if(defaultValue) {
+          data[i][as] = defaultValue;
+          newData.push(data[i]);
+        }
+    }
+  
+    if(data.length === 0 && defaultValue) {
+      newData.push(defaultValue);
     }
     
     //meta = vg.meta.extend(vg.duplicate( kkey ? zmeta[kkey] : zmeta ), as + ".", meta);
